@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Celestial Chronos — Cyberpunk Luxury Timepiece</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0f; overflow: hidden; font-family: 'JetBrains Mono', monospace; }
+        #canvas-container { width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; }
+        
+        #ui-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 100;
+        }
+        
+        #header {
+            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            text-align: center;
+        }
+        
+        #title {
+            font-size: 14px; letter-spacing: 8px; color: #00ffff;
+            text-shadow: 0 0 20px #00ffff, 0 0 40px #00ffff; text-transform: uppercase; margin-bottom: 8px;
+        }
+        
+        #subtitle {
+            font-size: 10px; letter-spacing: 4px; color: #b08d57; text-transform: uppercase; opacity: 0.7;
+        }
+        
+        #state-indicator {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            text-align: center;
+        }
+        
+        #state-label {
+            font-size: 10px; letter-spacing: 3px; color: #00ffff; text-transform: uppercase;
+            opacity: 0.5; margin-bottom: 8px;
+        }
+        
+        #state-value {
+            font-size: 18px; letter-spacing: 6px; color: #00ffff;
+            text-shadow: 0 0 15px #00ffff; text-transform: uppercase; transition: all 0.3s;
+        }
+        
+        #state-value.exploded { color: #ff1a1a; text-shadow: 0 0 15px #ff1a1a; }
+        
+        #instructions {
+            position: absolute; bottom: 30px; right: 30px; text-align: right;
+        }
+        
+        #instructions p {
+            font-size: 9px; letter-spacing: 2px; color: #b08d57; opacity: 0.5;
+            margin-bottom: 4px; text-transform: uppercase;
+        }
+        
+        .component-label {
+            position: absolute; padding: 6px 12px; background: rgba(10, 10, 15, 0.9);
+            border: 1px solid #00ffff; border-radius: 2px; font-size: 9px;
+            letter-spacing: 2px; color: #00ffff; text-transform: uppercase; white-space: nowrap;
+            opacity: 0; transform: translateY(10px); transition: opacity 0.5s, transform 0.5s;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+        
+        .component-label.visible { opacity: 1; transform: translateY(0); }
+        .component-label::before {
+            content: ''; position: absolute; left: -30px; top: 50%; width: 20px; height: 1px;
+            background: #00ffff; box-shadow: 0 0 10px #00ffff;
+        }
+        
+        #time-display { position: absolute; top: 30px; right: 30px; text-align: right; }
+        
+        #digital-time {
+            font-size: 32px; letter-spacing: 4px; color: #00ffff;
+            text-shadow: 0 0 20px #00ffff; font-variant-numeric: tabular-nums;
+        }
+        
+        #digital-date {
+            font-size: 10px; letter-spacing: 3px; color: #b08d57; margin-top: 8px; text-transform: uppercase;
+        }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0f; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000; transition: opacity 1s;
+        }
+        
+        #loading.hidden { opacity: 0; pointer-events: none; }
+        
+        #loading-text {
+            font-size: 12px; letter-spacing: 6px; color: #00ffff;
+            text-transform: uppercase; animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        
+        #scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 99; background: repeating-linear-gradient(
+                0deg, rgba(0, 0, 0, 0.1) 0px, rgba(0, 0, 0, 0.1) 1px, transparent 1px, transparent 3px
+            ); opacity: 0.3;
+        }
+        
+        #vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 98; background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.8) 100%);
+        }
+        
+        .progress-bar {
+            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+            width: 200px; height: 4px; background: rgba(176, 141, 87, 0.2); border-radius: 2px;
+        }
+        
+        .progress-fill {
+            height: 100%; background: linear-gradient(90deg, #b08d57, #00ffff);
+            border-radius: 2px; transition: width 0.1s;
+            box-shadow: 0 0 10px #00ffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading"><div id="loading-text">Initializing Chronos</div></div>
+    <div id="canvas-container"></div>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    
+    <div id="ui-overlay">
+        <div id="header">
+            <div id="title">Celestial Chronos</div>
+            <div id="subtitle">Cyberpunk Luxury Timepiece</div>
+        </div>
+        
+        <div id="time-display">
+            <div id="digital-time">00:00:00</div>
+            <div id="digital-date">Monday, January 1, 2026</div>
+        </div>
+        
+        <div id="instructions">
+            <p>Scroll to deconstruct</p>
+            <p>Drag to rotate</p>
+        </div>
+        
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        
+        <div id="state-indicator">
+            <div id="state-label">Current State</div>
+            <div id="state-value">Assembly</div>
+        </div>
+    </div>
+    
+    <div class="component-label" id="label-mainspring" style="left: 15%; top: 25%;">Mainspring Barrel</div>
+    <div class="component-label" id="label-balance" style="left: 75%; top: 20%;">Balance Wheel</div>
+    <div class="component-label" id="label-gears" style="left: 10%; top: 55%;">Gear Train</div>
+    <div class="component-label" id="label-crystal" style="left: 50%; top: 5%;">Sapphire Crystal</div>
+    <div class="component-label" id="label-hands" style="left: 50%; top: 85%;">Watch Hands</div>
+    <div class="component-label" id="label-movement" style="left: 80%; top: 50%;">Movement Plate</div>
+    <div class="component-label" id="label-case" style="left: 5%; top: 70%;">Case</div>
+    <div class="component-label" id="label-jewels" style="left: 70%; top: 65%;">Jewel Bearings</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { GammaCorrectionShader } from 'three/addons/shaders/GammaCorrectionShader.js';
+
+        // STATE
+        let explosionProgress = 0;
+        let targetProgress = 0;
+        const LERP_SPEED = 0.03;
+
+        // Scene setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0f);
+        scene.fog = new THREE.FogExp2(0x0a0a0f, 0.012);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 18);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 8;
+        controls.maxDistance = 35;
+        controls.enablePan = false;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.3;
+
+        // Post-processing
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.2, 0.4, 0.1
+        );
+        composer.addPass(bloomPass);
+
+        // Film grain shader
+        const grainShader = {
+            uniforms: { tDiffuse: { value: null }, time: { value: 0 }, intensity: { value: 0.12 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `
+                uniform sampler2D tDiffuse; uniform float time; uniform float intensity; varying vec2 vUv;
+                float rand(vec2 c) { return fract(sin(dot(c.xy, vec2(12.9898,78.233))) * 43758.5453); }
+                void main() {
+                    vec4 color = texture2D(tDiffuse, vUv);
+                    float noise = rand(vUv + time) * intensity;
+                    color.rgb += noise - intensity * 0.5;
+                    gl_FragColor = color;
+                }
+            `
+        };
+        const grainPass = new ShaderPass(grainShader);
+        composer.addPass(grainPass);
+        composer.addPass(new ShaderPass(GammaCorrectionShader));
+
+        // Lighting
+        scene.add(new THREE.AmbientLight(0x1a1a2e, 0.4));
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+        mainLight.position.set(5, 10, 5);
+        scene.add(mainLight);
+
+        const cyanLight1 = new THREE.PointLight(0x00ffff, 2, 25);
+        cyanLight1.position.set(8, 5, 5);
+        scene.add(cyanLight1);
+
+        const cyanLight2 = new THREE.PointLight(0x00ffff, 1.5, 20);
+        cyanLight2.position.set(-6, -3, -5);
+        scene.add(cyanLight2);
+
+        const goldLight = new THREE.PointLight(0xb08d57, 1.2, 18);
+        goldLight.position.set(0, 2, 8);
+        scene.add(goldLight);
+
+        // Materials
+        const goldMat = new THREE.MeshPhysicalMaterial({
+            color: 0xb08d57, metalness: 0.9, roughness: 0.2,
+            emissive: 0x1a1200, emissiveIntensity: 0.15
+        });
+
+        const goldPlateMat = new THREE.MeshPhysicalMaterial({
+            color: 0xb08d57, metalness: 0.95, roughness: 0.12,
+            emissive: 0x00ffff, emissiveIntensity: 0.03
+        });
+
+        const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+        
+        const cyanEmissiveMat = new THREE.MeshPhysicalMaterial({
+            color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 2.5, metalness: 0, roughness: 1
+        });
+
+        const rubyMat = new THREE.MeshPhysicalMaterial({
+            color: 0xff1a1a, metalness: 0.1, roughness: 0.05,
+            transmission: 0.6, thickness: 0.5, ior: 1.77, transparent: true, opacity: 0.85
+        });
+
+        const steelMat = new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 1, roughness: 0.3 });
+
+        const darkMat = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0f, metalness: 0.8, roughness: 0.4 });
+
+        const crystalMat = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff, metalness: 0, roughness: 0,
+            transmission: 0.9, thickness: 0.5, ior: 1.77, transparent: true, opacity: 0.25
+        });
+
+        // Watch components storage
+        const components = [];
+        const gears = [];
+        let balanceWheel = null;
+
+        // Helper: create gear
+        function createGear(innerR, outerR, teeth, thick) {
+            const shape = new THREE.Shape();
+            const toothH = (outerR - innerR) * 0.45;
+            
+            for (let i = 0; i < teeth; i++) {
+                const a = (i / teeth) * Math.PI * 2;
+                const nextA = ((i + 1) / teeth) * Math.PI * 2;
+                const midA = (a + nextA) / 2;
+                const w = (Math.PI * 2 / teeth) * 0.35;
+                
+                if (i === 0) shape.moveTo(Math.cos(a + w * 0.2) * innerR, Math.sin(a + w * 0.2) * innerR);
+                else shape.lineTo(Math.cos(a + w * 0.2) * innerR, Math.sin(a + w * 0.2) * innerR);
+                
+                shape.lineTo(Math.cos(a + w * 0.5) * (innerR + toothH * 0.3), Math.sin(a + w * 0.5) * (innerR + toothH * 0.3));
+                shape.lineTo(Math.cos(a + w) * outerR, Math.sin(a + w) * outerR);
+                shape.lineTo(Math.cos(midA) * (innerR + toothH * 0.3), Math.sin(midA) * (innerR + toothH * 0.3));
+            }
+            shape.closePath();
+            
+            const hole = new THREE.Path();
+            hole.absarc(0, 0, innerR * 0.25, 0, Math.PI * 2, true);
+            shape.holes.push(hole);
+
+            const geo = new THREE.ExtrudeGeometry(shape, {
+                depth: thick, bevelEnabled: true,
+                bevelThickness: thick * 0.08, bevelSize: thick * 0.08, bevelSegments: 2
+            });
+            geo.rotateX(Math.PI / 2);
+            return geo;
+        }
+
+        // Create mainspring barrel
+        function createBarrel(z) {
+            const g = new THREE.Group();
+            
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.5, 48), goldPlateMat);
+            barrel.rotation.x = Math.PI / 2;
+            g.add(barrel);
+
+            // Teeth
+            const teeth = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.08, 6, 48), goldMat);
+            teeth.rotation.x = Math.PI / 2;
+            teeth.position.z = 0.26;
+            g.add(teeth.clone());
+            teeth.position.z = -0.26;
+            g.add(teeth);
+
+            // Spiral spring inside
+            const pts = [];
+            for (let i = 0; i < 900; i++) {
+                const a = (i / 900) * Math.PI * 4.5;
+                const r = 0.25 + (i / 900) * 1.2;
+                pts.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0));
+            }
+            const spring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x8B4513 }));
+            g.add(spring);
+
+            // Cyan accent
+            const acc = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.025, 8, 48), cyanEmissiveMat);
+            acc.rotation.x = Math.PI / 2;
+            acc.position.z = 0.26;
+            g.add(acc);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + 10, type: 'barrel' };
+            return g;
+        }
+
+        // Create main gear
+        function createMainGear(z, r) {
+            const g = new THREE.Group();
+            
+            const gear = new THREE.Mesh(createGear(r * 0.5, r, 28, 0.25), goldMat);
+            g.add(gear);
+
+            // Teeth layer
+            const teeth = new THREE.Mesh(createGear(r * 0.85, r * 1.15, 28, 0.3), goldMat);
+            teeth.position.z = 0.05;
+            g.add(teeth);
+
+            // Cyan ring
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.9, 0.03, 8, 48), cyanEmissiveMat);
+            ring.rotation.x = Math.PI / 2;
+            g.add(ring);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (z > 0 ? 7 : -7), type: 'gear', rotSpeed: 0.003 * (Math.random() > 0.5 ? 1 : -1) };
+            return g;
+        }
+
+        // Create balance wheel
+        function createBalance(z) {
+            const g = new THREE.Group();
+            
+            // Wheel
+            const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.1, 48), goldMat);
+            wheel.rotation.x = Math.PI / 2;
+            g.add(wheel);
+
+            // Spokes
+            for (let i = 0; i < 4; i++) {
+                const a = (i / 4) * Math.PI * 2;
+                const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.08), goldMat);
+                spoke.position.x = Math.cos(a) * 0.5;
+                spoke.position.y = Math.sin(a) * 0.5;
+                spoke.rotation.z = a;
+                g.add(spoke);
+            }
+
+            // Hairspring
+            const hairPts = [];
+            for (let i = 0; i < 600; i++) {
+                const a = (i / 600) * Math.PI * 5;
+                const r = 0.15 + (i / 600) * 0.65;
+                hairPts.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0.06));
+            }
+            const hair = new THREE.Line(new THREE.BufferGeometry().setFromPoints(hairPts), new THREE.LineBasicMaterial({ color: 0xb08d57 }));
+            g.add(hair);
+
+            // Cyan center
+            const center = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.25, 16), cyanEmissiveMat);
+            center.rotation.x = Math.PI / 2;
+            g.add(center);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (z > 0 ? 8 : -8), type: 'balance', phase: 0 };
+            return g;
+        }
+
+        // Create jewel
+        function createJewel(z) {
+            const g = new THREE.Group();
+            
+            const jewel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.08, 12), rubyMat);
+            jewel.rotation.x = Math.PI / 2;
+            g.add(jewel);
+
+            const setting = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 6, 12), goldMat);
+            setting.rotation.x = Math.PI / 2;
+            g.add(setting);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (Math.random() > 0.5 ? 4 : -4), type: 'jewel' };
+            return g;
+        }
+
+        // Create hand
+        function createHand(length, width, z) {
+            const g = new THREE.Group();
+            
+            const shape = new THREE.Shape();
+            shape.moveTo(-width / 2, 0);
+            shape.lineTo(-width / 4, length * 0.1);
+            shape.lineTo(width / 4, length * 0.1);
+            shape.lineTo(width / 2, 0);
+            shape.lineTo(width / 3, -length * 0.12);
+            shape.lineTo(-width / 3, -length * 0.12);
+            shape.closePath();
+
+            const hand = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false }), goldMat);
+            hand.rotation.x = -Math.PI / 2;
+            hand.position.y = length / 2;
+            g.add(hand);
+
+            // Cyan tip
+            const tip = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, length * 0.12, 0.08), cyanEmissiveMat);
+            tip.position.y = length * 0.6;
+            g.add(tip);
+
+            // Center cap
+            const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 16), cyanEmissiveMat);
+            cap.rotation.x = Math.PI / 2;
+            g.add(cap);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (z > 0 ? 5 : -5), type: 'hand' };
+            return g;
+        }
+
+        // Create movement plate
+        function createPlate(z) {
+            const g = new THREE.Group();
+            
+            const plate = new THREE.Mesh(new THREE.CylinderGeometry(3.8, 3.8, 0.15, 64), goldPlateMat);
+            plate.rotation.x = Math.PI / 2;
+            g.add(plate);
+
+            // Circuit lines
+            const circMat = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.4 });
+            for (let i = 0; i < 6; i++) {
+                const a = (i / 6) * Math.PI * 2;
+                const pts = [new THREE.Vector3(0, 0, 0.08), new THREE.Vector3(Math.cos(a) * 3.5, Math.sin(a) * 3.5, 0.08)];
+                g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), circMat));
+            }
+            for (let r = 0.8; r < 3.5; r += 0.8) {
+                const circPts = [];
+                for (let i = 0; i <= 48; i++) {
+                    const a = (i / 48) * Math.PI * 2;
+                    circPts.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0.08));
+                }
+                g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(circPts), circMat));
+            }
+
+            // Screws
+            for (let i = 0; i < 6; i++) {
+                const a = (i / 6) * Math.PI * 2;
+                const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 6), steelMat);
+                screw.position.set(Math.cos(a) * 3.6, Math.sin(a) * 3.6, 0);
+                screw.rotation.x = Math.PI / 2;
+                g.add(screw);
+            }
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: 0, type: 'plate' };
+            return g;
+        }
+
+        // Create case
+        function createCase(z) {
+            const g = new THREE.Group();
+            
+            const caseBody = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 1.2, 64), darkMat);
+            caseBody.rotation.x = Math.PI / 2;
+            g.add(caseBody);
+
+            // Case edges
+            const edgeGeo = new THREE.TorusGeometry(4.2, 0.08, 8, 64);
+            const frontEdge = new THREE.Mesh(edgeGeo, goldMat);
+            frontEdge.rotation.x = Math.PI / 2;
+            frontEdge.position.z = 0.61;
+            g.add(frontEdge);
+            const backEdge = frontEdge.clone();
+            backEdge.position.z = -0.61;
+            g.add(backEdge);
+
+            // Crown
+            const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.6, 16), goldMat);
+            crown.rotation.z = Math.PI / 2;
+            crown.position.x = 4.4;
+            g.add(crown);
+
+            // Cyan edge
+            const cyanEdge = new THREE.Mesh(new THREE.TorusGeometry(4.25, 0.035, 8, 64), cyanEmissiveMat);
+            cyanEdge.rotation.x = Math.PI / 2;
+            cyanEdge.position.z = 0.61;
+            g.add(cyanEdge);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (z > 0 ? 12 : -12), type: 'case' };
+            return g;
+        }
+
+        // Create crystal
+        function createCrystal(z) {
+            const g = new THREE.Group();
+            
+            const crystal = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 0.2, 64), crystalMat);
+            crystal.rotation.x = Math.PI / 2;
+            g.add(crystal);
+
+            // Bezel
+            const bezel = new THREE.Mesh(new THREE.TorusGeometry(4.1, 0.15, 8, 64), goldMat);
+            bezel.rotation.x = Math.PI / 2;
+            bezel.position.z = 0.1;
+            g.add(bezel);
+
+            // Cyan bezel
+            const cyanBezel = new THREE.Mesh(new THREE.TorusGeometry(4.15, 0.03, 8, 64), cyanEmissiveMat);
+            cyanBezel.rotation.x = Math.PI / 2;
+            cyanBezel.position.z = 0.12;
+            g.add(cyanBezel);
+
+            g.position.z = z;
+            g.userData = { originalZ: z, explodedZ: z + (z > 0 ? 14 : -14), type: 'crystal' };
+            return g;
+        }
+
+        // Build the watch
+        const plate = createPlate(0);
+        components.push(plate);
+
+        const barrel = createBarrel(0.6);
+        components.push(barrel);
+
+        for (let i = 0; i < 3; i++) {
+            const g = createMainGear(-0.3 + i * 0.25, 1.2 + i * 0.4);
+            gears.push(g);
+            components.push(g);
+        }
+
+        balanceWheel = createBalance(1.5);
+        components.push(balanceWheel);
+
+        for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2;
+            const jewel = createJewel(Math.cos(angle) * 2.5 + Math.sin(angle) * 2.5 * 0.3);
+            jewel.position.x = Math.cos(angle) * 2.5;
+            jewel.position.y = Math.sin(angle) * 2.5;
+            components.push(jewel);
+        }
+
+        const hourHand = createHand(1.0, 0.3, 2.3);
+        components.push(hourHand);
+
+        const minHand = createHand(1.5, 0.25, 2.45);
+        components.push(minHand);
+
+        const secHand = createHand(1.8, 0.15, 2.6);
+        components.push(secHand);
+
+        const caseBack = createCase(-2.5);
+        components.push(caseBack);
+
+        const crystal = createCrystal(3);
+        components.push(crystal);
+
+        components.forEach(c => scene.add(c));
+
+        // Labels mapping
+        const labels = {
+            barrel: document.getElementById('label-mainspring'),
+            balance: document.getElementById('label-balance'),
+            gears: document.getElementById('label-gears'),
+            crystal: document.getElementById('label-crystal'),
+            hand: document.getElementById('label-hands'),
+            plate: document.getElementById('label-movement'),
+            case: document.getElementById('label-case'),
+            jewel: document.getElementById('label-jewels')
+        };
+
+        // Mouse wheel handling
+        window.addEventListener('wheel', (e) => {
+            targetProgress += e.deltaY * 0.0005;
+            targetProgress = Math.max(0, Math.min(1, targetProgress));
+        });
+
+        // Touch handling
+        let touchStartY = 0;
+        window.addEventListener('touchstart', (e) => { touchStartY = e.touches[0].clientY; });
+        window.addEventListener('touchmove', (e) => {
+            const delta = (touchStartY - e.touches[0].clientY) * 0.002;
+            targetProgress += delta;
+            targetProgress = Math.max(0, Math.min(1, targetProgress));
+            touchStartY = e.touches[0].clientY;
+        });
+
+        // UI Updates
+        function updateUI() {
+            const stateEl = document.getElementById('state-value');
+            const progressEl = document.getElementById('progress-fill');
+            
+            stateEl.textContent = explosionProgress > 0.5 ? 'Exploded View' : 'Assembly';
+            stateEl.classList.toggle('exploded', explosionProgress > 0.5);
+            progressEl.style.width = `${explosionProgress * 100}%`;
+
+            // Show labels only when exploded
+            const showLabels = explosionProgress > 0.7;
+            Object.values(labels).forEach(l => l.classList.toggle('visible', showLabels));
+
+            // Update clock
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('digital-time').textContent = timeStr;
+            document.getElementById('digital-date').textContent = dateStr;
+        }
+
+        // Lerp function
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        // Animation loop
+        const clock = new THREE.Clock();
+        let time = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            time += delta;
+
+            // Lerp explosion progress
+            explosionProgress += (targetProgress - explosionProgress) * LERP_SPEED;
+
+            // Update each component
+            components.forEach(comp => {
+                const ud = comp.userData;
+                const targetZ = lerp(ud.originalZ, ud.explodedZ, explosionProgress);
+                comp.position.z = lerp(comp.position.z, targetZ, 0.08);
+
+                // Rotate gears (always in assembly, slow in exploded)
+                if (ud.type === 'gear') {
+                    const rotSpeed = ud.rotSpeed * (explosionProgress < 0.3 ? 1 : 0.2);
+                    comp.rotation.z += rotSpeed;
+                }
+
+                // Balance wheel oscillation (only in assembly)
+                if (ud.type === 'balance' && explosionProgress < 0.3) {
+                    ud.phase += delta * 8;
+                    comp.rotation.z = Math.sin(ud.phase) * 0.4;
+                }
+
+                // Watch hands (only in assembly)
+                if (ud.type === 'hand' && explosionProgress < 0.2) {
+                    const now = new Date();
+                    if (ud === hourHand.userData) comp.rotation.z = -(now.getHours() + now.getMinutes() / 60) * (Math.PI / 6);
+                    if (ud === minHand.userData) comp.rotation.z = -(now.getMinutes() + now.getSeconds() / 60) * (Math.PI / 30);
+                    if (ud === secHand.userData) comp.rotation.z = -now.getSeconds() * (Math.PI / 30);
+                }
+            });
+
+            // Animate lights
+            cyanLight1.position.x = Math.sin(time * 0.5) * 8;
+            cyanLight1.position.y = Math.cos(time * 0.3) * 5;
+            cyanLight2.position.x = Math.cos(time * 0.4) * -6;
+            cyanLight2.position.y = Math.sin(time * 0.2) * -3;
+
+            // Update grain
+            grainPass.uniforms.time.value = time;
+
+            controls.update();
+            composer.render();
+            updateUI();
+        }
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Hide loading
+        setTimeout(() => {
+            document.getElementById('loading').classList.add('hidden');
+        }, 1500);
+
+        animate();
+    </script>
+</body>
+</html>
